@@ -75,13 +75,26 @@ try {
     }
     $car_check->close();
 
+    $max_check = $conn->prepare("SELECT max_clients FROM mechanics WHERE mechanic_id = ? AND status = 'active'");
+    $max_check->bind_param("i", $mechanic_id);
+    $max_check->execute();
+    $max_result = $max_check->get_result();
+    
+    if ($max_result->num_rows === 0) {
+        throw new Exception('invalid_mechanic');
+    }
+    
+    $max_data = $max_result->fetch_assoc();
+    $max_capacity = $max_data['max_clients'];
+    $max_check->close();
+
     $capacity_check = $conn->prepare("SELECT COUNT(*) as count FROM appointments WHERE mechanic_id = ? AND appointment_date = ?");
     $capacity_check->bind_param("is", $mechanic_id, $appointment_date);
     $capacity_check->execute();
     $capacity_result = $capacity_check->get_result();
     $capacity_row = $capacity_result->fetch_assoc();
     
-    if ($capacity_row['count'] >= 4) {
+    if ($capacity_row['count'] >= $max_capacity) {
         throw new Exception('mechanic_full');
     }
     $capacity_check->close();

@@ -1,9 +1,9 @@
 <?php
 
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_NAME', 'car_workshop');
+define('DB_HOST', 'sql204.infinityfree.com');
+define('DB_USER', 'if0_41287560');
+define('DB_PASS', '11lakhtaka');
+define('DB_NAME', 'if0_41287560_car_workshop');
 
 function getDBConnection() {
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);

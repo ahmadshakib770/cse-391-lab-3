@@ -104,24 +104,17 @@ closeConnection($conn);
                     </div>
 
                     <div class="form-group">
-                        <label for="appointment_date">Appointment Date *</label>
+                        <label for="appointment_date">Appointment Date (dd-mm-yy) *</label>
                         <input type="date" id="appointment_date" name="appointment_date" 
                                min="<?php echo date('Y-m-d'); ?>" required>
                         <span class="error-msg" id="date_error"></span>
                     </div>
 
-                    <div class="form-group">
-                        <label for="mechanic_id">Select Mechanic *</label>
-                        <select id="mechanic_id" name="mechanic_id" required>
-                            <option value="">-- Choose a mechanic --</option>
-                            <?php foreach ($mechanics as $mechanic): ?>
-                                <option value="<?php echo $mechanic['mechanic_id']; ?>">
-                                    <?php echo htmlspecialchars($mechanic['mechanic_name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                    <div id="availability_display" style="display:none; margin: 1rem 0;">
+                        <h3 style="margin-bottom: 0.75rem; font-size: 1rem; color: #2c3e50;">Select Your Mechanic</h3>
+                        <div id="mechanics_availability"></div>
+                        <input type="hidden" id="mechanic_id" name="mechanic_id" required>
                         <span class="error-msg" id="mechanic_error"></span>
-                        <div id="availability_info" class="info-msg"></div>
                     </div>
 
                     <div class="form-actions">
@@ -199,37 +192,91 @@ closeConnection($conn);
             return isValid;
         }
 
-        document.getElementById('appointment_date').addEventListener('change', checkAvailability);
-        document.getElementById('mechanic_id').addEventListener('change', checkAvailability);
+        const mechanicsData = <?php echo json_encode($mechanics); ?>;
+        let selectedMechanicId = null;
 
-        function checkAvailability() {
+        document.getElementById('appointment_date').addEventListener('change', function() {
+            checkAllMechanicsAvailability();
+        });
+
+        function checkAllMechanicsAvailability() {
             const date = document.getElementById('appointment_date').value;
-            const mechanicId = document.getElementById('mechanic_id').value;
-            const infoDiv = document.getElementById('availability_info');
+            const displayDiv = document.getElementById('availability_display');
+            const mechanicsDiv = document.getElementById('mechanics_availability');
 
-            if (date && mechanicId) {
-                fetch('check_availability.php?date=' + date + '&mechanic_id=' + mechanicId)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.available > 0) {
-                            infoDiv.className = 'info-msg success';
-                            infoDiv.textContent = data.available + ' slot(s) available';
-                        } else {
-                            infoDiv.className = 'info-msg error';
-                            infoDiv.textContent = 'No slots available - Please choose another mechanic or date';
-                        }
-                    })
-                    .catch(error => {
-                        infoDiv.textContent = '';
-                    });
-            } else {
-                infoDiv.textContent = '';
+            if (!date) {
+                displayDiv.style.display = 'none';
+                selectedMechanicId = null;
+                document.getElementById('mechanic_id').value = '';
+                return;
+            }
+
+            displayDiv.style.display = 'block';
+            mechanicsDiv.innerHTML = '<p style="color: #6c757d;">Loading availability...</p>';
+
+            Promise.all(
+                mechanicsData.map(mechanic => 
+                    fetch('check_availability.php?date=' + date + '&mechanic_id=' + mechanic.mechanic_id)
+                        .then(response => response.json())
+                        .then(data => ({
+                            name: mechanic.mechanic_name,
+                            id: mechanic.mechanic_id,
+                            available: data.available,
+                            booked: data.booked
+                        }))
+                )
+            ).then(results => {
+                let html = '<div style="display: grid; gap: 0.75rem;">';
+                
+                results.forEach(mechanic => {
+                    const availableClass = mechanic.available > 0 ? 'success' : 'error';
+                    const statusColor = mechanic.available > 0 ? '#28a745' : '#dc3545';
+                    const isDisabled = mechanic.available === 0;
+                    const cursorStyle = isDisabled ? 'not-allowed' : 'pointer';
+                    const opacityStyle = isDisabled ? '0.6' : '1';
+                    
+                    html += `
+                        <div class="mechanic-card" data-mechanic-id="${mechanic.id}" data-available="${mechanic.available}"
+                             style="padding: 1rem; border: 2px solid #ddd; border-radius: 4px; background: white; 
+                                    display: flex; justify-content: space-between; align-items: center; 
+                                    cursor: ${cursorStyle}; transition: all 0.3s ease; opacity: ${opacityStyle};"
+                             ${isDisabled ? '' : 'onclick="selectMechanic(' + mechanic.id + ', \'' + mechanic.name + '\')"'}>
+                            <span style="font-weight: 500; font-size: 1rem;">${mechanic.name}</span>
+                            <span style="color: ${statusColor}; font-size: 0.875rem; font-weight: 500;">
+                                ${mechanic.available > 0 ? mechanic.available + ' slot(s) available' : 'Fully booked'}
+                            </span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                mechanicsDiv.innerHTML = html;
+            }).catch(error => {
+                mechanicsDiv.innerHTML = '<p style="color: #dc3545;">Error loading availability</p>';
+            });
+        }
+
+        function selectMechanic(mechanicId, mechanicName) {
+            const cards = document.querySelectorAll('.mechanic-card');
+            cards.forEach(card => {
+                card.style.border = '2px solid #ddd';
+                card.style.background = 'white';
+            });
+            
+            const selectedCard = document.querySelector(`[data-mechanic-id="${mechanicId}"]`);
+            if (selectedCard && selectedCard.dataset.available > 0) {
+                selectedCard.style.border = '2px solid #2c3e50';
+                selectedCard.style.background = '#f0f8ff';
+                selectedMechanicId = mechanicId;
+                document.getElementById('mechanic_id').value = mechanicId;
+                document.getElementById('mechanic_error').textContent = '';
             }
         }
 
         document.getElementById('appointmentForm').addEventListener('reset', function() {
             document.querySelectorAll('.error-msg').forEach(el => el.textContent = '');
-            document.getElementById('availability_info').textContent = '';
+            document.getElementById('availability_display').style.display = 'none';
+            selectedMechanicId = null;
+            document.getElementById('mechanic_id').value = '';
         });
     </script>
 </body>

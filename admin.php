@@ -11,6 +11,7 @@ $query = "SELECT
             a.client_phone,
             a.car_license,
             a.appointment_date,
+            a.mechanic_id,
             a.status,
             m.mechanic_name
           FROM appointments a
@@ -53,6 +54,7 @@ closeConnection($conn);
             <nav>
                 <a href="index.php">Book Appointment</a>
                 <a href="admin.php" class="active">Admin Panel</a>
+                <a href="manage_mechanics.php">Manage Mechanics</a>
             </nav>
         </header>
 
@@ -75,13 +77,48 @@ closeConnection($conn);
                 
                 <?php if (isset($_GET['success'])): ?>
                     <div class="message success">
-                        Operation completed successfully!
+                        <?php
+                        $success_msg = '';
+                        switch ($_GET['success']) {
+                            case 'updated':
+                                $success_msg = 'Appointment updated successfully!';
+                                break;
+                            case 'deleted':
+                                $success_msg = 'Appointment deleted successfully!';
+                                break;
+                            default:
+                                $success_msg = 'Operation completed successfully!';
+                        }
+                        echo $success_msg;
+                        ?>
                     </div>
                 <?php endif; ?>
 
                 <?php if (isset($_GET['error'])): ?>
                     <div class="message error">
-                        An error occurred. Please try again.
+                        <?php
+                        $error_msg = '';
+                        switch ($_GET['error']) {
+                            case 'duplicate_car':
+                                $error_msg = 'This car already has an appointment on the selected date.';
+                                break;
+                            case 'mechanic_full':
+                                $error_msg = 'Selected mechanic is fully booked for this date.';
+                                break;
+                            case 'invalid_data':
+                                $error_msg = 'Invalid data provided.';
+                                break;
+                            case 'invalid_mechanic':
+                                $error_msg = 'Selected mechanic is not available.';
+                                break;
+                            case 'appointment_not_found':
+                                $error_msg = 'Appointment not found.';
+                                break;
+                            default:
+                                $error_msg = 'An error occurred. Please try again.';
+                        }
+                        echo $error_msg;
+                        ?>
                     </div>
                 <?php endif; ?>
 
@@ -112,7 +149,7 @@ closeConnection($conn);
                                         <td><?php echo htmlspecialchars($appointment['client_name']); ?></td>
                                         <td><?php echo htmlspecialchars($appointment['client_phone']); ?></td>
                                         <td><?php echo htmlspecialchars($appointment['car_license']); ?></td>
-                                        <td><?php echo date('M d, Y', strtotime($appointment['appointment_date'])); ?></td>
+                                        <td><?php echo date('d-m-y', strtotime($appointment['appointment_date'])); ?></td>
                                         <td><?php echo htmlspecialchars($appointment['mechanic_name']); ?></td>
                                         <td>
                                             <span class="status-badge status-<?php echo $appointment['status']; ?>">
@@ -144,8 +181,8 @@ closeConnection($conn);
                         <input type="hidden" name="appointment_id" id="edit_appointment_id">
 
                         <div class="form-group">
-                            <label for="edit_date">Appointment Date</label>
-                            <input type="date" id="edit_date" name="appointment_date" required>
+                            <label for="edit_date">Appointment Date (dd-mm-yy)</label>
+                            <input type="date" id="edit_date" name="appointment_date" min="<?php echo date('Y-m-d'); ?>" required>
                         </div>
 
                         <div class="form-group">
@@ -157,6 +194,7 @@ closeConnection($conn);
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <div id="edit_availability_info" class="info-msg" style="margin-top: 0.5rem;"></div>
                         </div>
 
                         <div class="form-group">
@@ -181,16 +219,82 @@ closeConnection($conn);
     </div>
 
     <script>
+        const appointmentsData = <?php echo json_encode($appointments); ?>;
+        const mechanicsData = <?php echo json_encode($mechanics); ?>;
+        let currentEditingId = null;
+
         function editAppointment(id) {
+            const appointment = appointmentsData.find(a => a.appointment_id == id);
+            if (!appointment) return;
+            
+            currentEditingId = id;
+            document.getElementById('edit_appointment_id').value = appointment.appointment_id;
+            document.getElementById('edit_date').value = appointment.appointment_date;
+            document.getElementById('edit_mechanic').value = appointment.mechanic_id;
+            document.getElementById('edit_status').value = appointment.status;
+            
+            document.getElementById('editModal').style.display = 'block';
+            checkEditAvailability();
+        }
+
+        document.getElementById('edit_date').addEventListener('change', checkEditAvailability);
+        document.getElementById('edit_mechanic').addEventListener('change', checkEditAvailability);
+
+        function checkEditAvailability() {
+            const date = document.getElementById('edit_date').value;
+            const mechanicId = document.getElementById('edit_mechanic').value;
+            const infoDiv = document.getElementById('edit_availability_info');
+
+            if (!date || !mechanicId) {
+                infoDiv.textContent = '';
+                return;
+            }
+
+            fetch(`check_availability.php?date=${date}&mechanic_id=${mechanicId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const slotsAvailable = data.available;
+                    
+                    if (slotsAvailable > 0) {
+                        infoDiv.className = 'info-msg success';
+                        infoDiv.textContent = slotsAvailable + ' slot(s) available';
+                    } else {
+                        infoDiv.className = 'info-msg error';
+                        infoDiv.textContent = 'Mechanic is fully booked for this date';
+                    }
+                })
+                .catch(error => {
+                    infoDiv.textContent = '';
+                });
         }
 
         function deleteAppointment(id) {
             if (confirm('Are you sure you want to delete this appointment?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'admin_actions.php';
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'appointment_id';
+                idInput.value = id;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
             }
         }
 
         function closeModal() {
             document.getElementById('editModal').style.display = 'none';
+            document.getElementById('edit_availability_info').textContent = '';
+            currentEditingId = null;
         }
 
         window.onclick = function(event) {

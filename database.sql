@@ -1,4 +1,7 @@
-CREATE TABLE IF NOT EXISTS mechanics (
+DROP TABLE IF EXISTS appointments;
+DROP TABLE IF EXISTS mechanics;
+
+CREATE TABLE mechanics (
     mechanic_id INT AUTO_INCREMENT PRIMARY KEY,
     mechanic_name VARCHAR(100) NOT NULL,
     max_clients INT DEFAULT 4,
@@ -6,7 +9,7 @@ CREATE TABLE IF NOT EXISTS mechanics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS appointments (
+CREATE TABLE appointments (
     appointment_id INT AUTO_INCREMENT PRIMARY KEY,
     client_name VARCHAR(100) NOT NULL,
     client_address TEXT NOT NULL,
