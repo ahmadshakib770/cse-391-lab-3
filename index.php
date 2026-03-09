@@ -40,7 +40,6 @@ closeConnection($conn);
             <div class="form-container">
                 <h2>Book Your Appointment</h2>
                 
-                <!-- Success/Error Messages -->
                 <?php if (isset($_GET['success'])): ?>
                     <div class="message success">
                         Appointment booked successfully!
